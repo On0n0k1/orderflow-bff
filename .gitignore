@@ -1,2 +1,9 @@
 CLAUDE.md
 SPEC.md
+
+# Gradle / Kotlin (bff-service)
+.gradle/
+build/
+out/
+*.class
+.kotlin/
