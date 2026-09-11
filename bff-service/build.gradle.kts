@@ -24,6 +24,8 @@ dependencies {
     implementation("ch.qos.logback:logback-classic:1.5.18")
 
     testImplementation("io.ktor:ktor-server-test-host")
+    testImplementation("io.ktor:ktor-client-mock")
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2")
     testImplementation(kotlin("test"))
 }
 
