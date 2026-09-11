@@ -4,7 +4,7 @@ import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.get
 import io.ktor.http.HttpStatusCode
-import kotlinx.io.IOException
+import kotlinx.coroutines.CancellationException
 
 /** Outcome of asking order-service for a single order. */
 sealed class OrderLookupResult {
@@ -22,9 +22,14 @@ class OrderServiceClient(
     private val baseUrl: String,
 ) {
     suspend fun getOrder(id: String): OrderLookupResult {
+        // Catches broadly (DNS failures like UnresolvedAddressException aren't
+        // IOExceptions) but rethrows CancellationException so structured
+        // concurrency cancellation still propagates correctly.
         val response = try {
             httpClient.get("$baseUrl/orders/$id")
-        } catch (e: IOException) {
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
             throw OrderServiceUnavailableException("failed to reach order-service", e)
         }
 

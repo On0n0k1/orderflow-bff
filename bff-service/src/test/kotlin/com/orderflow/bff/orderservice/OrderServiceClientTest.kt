@@ -55,4 +55,15 @@ class OrderServiceClientTest {
             clientWith(engine).getOrder("order-1")
         }
     }
+
+    @Test
+    fun `getOrder throws OrderServiceUnavailableException when the transport fails`() = runTest {
+        // Regression test: DNS/connection failures like UnresolvedAddressException
+        // are not IOExceptions, so the client must catch broadly at this boundary.
+        val engine = MockEngine { throw java.nio.channels.UnresolvedAddressException() }
+
+        assertFailsWith<OrderServiceUnavailableException> {
+            clientWith(engine).getOrder("order-1")
+        }
+    }
 }
