@@ -1,0 +1,2 @@
+# Full local stack (order-service, bff-service, Kafka, Redis) — wired up in a later phase.
+services: {}
