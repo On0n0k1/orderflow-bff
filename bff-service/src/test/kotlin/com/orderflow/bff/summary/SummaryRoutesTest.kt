@@ -1,5 +1,6 @@
 package com.orderflow.bff.summary
 
+import com.orderflow.bff.cache.InMemoryOrderSummaryCache
 import com.orderflow.bff.module
 import com.orderflow.bff.orderservice.OrderServiceClient
 import io.ktor.client.HttpClient
@@ -64,5 +65,46 @@ class SummaryRoutesTest {
         val response = createClient { }.get("/order-summary/order-1")
 
         assertEquals(HttpStatusCode.BadGateway, response.status)
+    }
+
+    @Test
+    fun `order-summary serves from cache without calling order-service`() = testApplication {
+        var requestCount = 0
+        val engine = MockEngine {
+            requestCount++
+            respondError(HttpStatusCode.InternalServerError)
+        }
+        val cache = InMemoryOrderSummaryCache()
+        val cached = OrderSummary(orderId = "order-1", customerId = "cust-1", itemCount = 2, total = 20.0, createdAt = "2026-01-01T00:00:00Z")
+        cache.put(cached)
+
+        application { module(orderServiceClientWith(engine), cache = cache) }
+
+        val client = createClient { install(ContentNegotiation) { json(Json { ignoreUnknownKeys = true }) } }
+        val response = client.get("/order-summary/order-1")
+
+        assertEquals(HttpStatusCode.OK, response.status)
+        assertEquals(cached, response.body<OrderSummary>())
+        assertEquals(0, requestCount)
+    }
+
+    @Test
+    fun `order-summary falls back to order-service on a cache miss and warms the cache`() = testApplication {
+        val body = """
+            {"id":"order-2","customerId":"cust-2","items":[{"productId":"sku-1","quantity":1,"unitPrice":7.0}],"total":7.0,"createdAt":"2026-01-01T00:00:00Z"}
+        """.trimIndent()
+        val engine = MockEngine { respond(body, HttpStatusCode.OK, headersOf(HttpHeaders.ContentType, "application/json")) }
+        val cache = InMemoryOrderSummaryCache()
+
+        application { module(orderServiceClientWith(engine), cache = cache) }
+
+        val client = createClient { install(ContentNegotiation) { json(Json { ignoreUnknownKeys = true }) } }
+        val response = client.get("/order-summary/order-2")
+
+        assertEquals(HttpStatusCode.OK, response.status)
+        assertEquals(7.0, response.body<OrderSummary>().total)
+
+        val warmed = cache.get("order-2")
+        assertEquals("order-2", warmed?.orderId)
     }
 }

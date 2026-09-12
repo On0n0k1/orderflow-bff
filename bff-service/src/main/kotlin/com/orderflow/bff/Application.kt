@@ -1,10 +1,14 @@
 package com.orderflow.bff
 
+import com.orderflow.bff.cache.InMemoryOrderSummaryCache
+import com.orderflow.bff.cache.OrderSummaryCache
+import com.orderflow.bff.cache.RedisOrderSummaryCache
 import com.orderflow.bff.events.ORDER_CREATED_TOPIC
 import com.orderflow.bff.events.OrderEventConsumer
 import com.orderflow.bff.orderservice.OrderServiceClient
 import com.orderflow.bff.orderservice.OrderServiceUnavailableException
 import com.orderflow.bff.summary.orderSummaryRoutes
+import com.orderflow.bff.summary.toSummary
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.cio.CIO
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation as ClientContentNegotiation
@@ -21,6 +25,8 @@ import io.ktor.server.response.respond
 import io.ktor.server.response.respondText
 import io.ktor.server.routing.get
 import io.ktor.server.routing.routing
+import io.lettuce.core.RedisClient
+import io.lettuce.core.RedisURI
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -35,19 +41,22 @@ import java.util.Properties
 
 fun main() {
     val port = System.getenv("PORT")?.toIntOrNull() ?: 8081
+    val cache = createDefaultCache()
     embeddedServer(Netty, port = port) {
-        module(orderEventConsumer = createDefaultOrderEventConsumer())
+        module(cache = cache, orderEventConsumer = createDefaultOrderEventConsumer(cache))
     }.start(wait = true)
 }
 
 /**
  * [orderEventConsumer] is left null by default so tests exercising only the
  * HTTP surface don't incidentally spin up a real Kafka client; main() always
- * supplies one.
+ * supplies one. [cache] defaults to an in-memory map for the same reason —
+ * production wiring in main() supplies the Redis-backed one.
  */
 fun Application.module(
     orderServiceClient: OrderServiceClient = createDefaultOrderServiceClient(),
     orderEventConsumer: OrderEventConsumer? = null,
+    cache: OrderSummaryCache = InMemoryOrderSummaryCache(),
 ) {
     install(ContentNegotiation) {
         json(Json { ignoreUnknownKeys = true })
@@ -72,7 +81,7 @@ fun Application.module(
         get("/health") {
             call.respondText("ok")
         }
-        orderSummaryRoutes(orderServiceClient)
+        orderSummaryRoutes(orderServiceClient, cache)
     }
 }
 
@@ -86,7 +95,13 @@ private fun createDefaultOrderServiceClient(): OrderServiceClient {
     return OrderServiceClient(httpClient, orderServiceUrl)
 }
 
-private fun createDefaultOrderEventConsumer(): OrderEventConsumer {
+private fun createDefaultCache(): OrderSummaryCache {
+    val redisUrl = System.getenv("REDIS_URL") ?: "redis://localhost:6379"
+    val connection = RedisClient.create(RedisURI.create(redisUrl)).connect()
+    return RedisOrderSummaryCache(connection)
+}
+
+private fun createDefaultOrderEventConsumer(cache: OrderSummaryCache): OrderEventConsumer {
     val brokers = System.getenv("KAFKA_BROKERS") ?: "localhost:9092"
     val props = Properties().apply {
         put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, brokers)
@@ -98,5 +113,6 @@ private fun createDefaultOrderEventConsumer(): OrderEventConsumer {
     val logger = LoggerFactory.getLogger(OrderEventConsumer::class.java)
     return OrderEventConsumer(KafkaConsumer(props), ORDER_CREATED_TOPIC) { event ->
         logger.info("received OrderCreated event: {}", event)
+        cache.put(event.toSummary())
     }
 }
