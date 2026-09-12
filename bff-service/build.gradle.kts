@@ -21,6 +21,7 @@ dependencies {
     implementation("io.ktor:ktor-client-core")
     implementation("io.ktor:ktor-client-cio")
     implementation("io.ktor:ktor-client-content-negotiation")
+    implementation("org.apache.kafka:kafka-clients:4.3.0")
     implementation("ch.qos.logback:logback-classic:1.5.18")
 
     testImplementation("io.ktor:ktor-server-test-host")

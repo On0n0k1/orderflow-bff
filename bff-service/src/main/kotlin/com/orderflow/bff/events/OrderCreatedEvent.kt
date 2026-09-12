@@ -3,6 +3,9 @@ package com.orderflow.bff.events
 import com.orderflow.bff.orderservice.OrderItemDto
 import kotlinx.serialization.Serializable
 
+/** Kafka topic order-service publishes OrderCreated events to. */
+const val ORDER_CREATED_TOPIC = "orders.created"
+
 /**
  * Mirrors order-service's OrderCreated Kafka payload
  * (see order-service's internal/events.OrderCreated). This is the contract
