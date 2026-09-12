@@ -1,5 +1,6 @@
 package com.orderflow.bff.summary
 
+import com.orderflow.bff.events.OrderCreatedEvent
 import com.orderflow.bff.orderservice.OrderDto
 import kotlinx.serialization.Serializable
 
@@ -24,4 +25,12 @@ fun OrderDto.toSummary(): OrderSummary = OrderSummary(
     itemCount = items.sumOf { it.quantity },
     total = total,
     createdAt = createdAt,
+)
+
+fun OrderCreatedEvent.toSummary(): OrderSummary = OrderSummary(
+    orderId = orderId,
+    customerId = customerId,
+    itemCount = items.sumOf { it.quantity },
+    total = total,
+    createdAt = timestamp,
 )
